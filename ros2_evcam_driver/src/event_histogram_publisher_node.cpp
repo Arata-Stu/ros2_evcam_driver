@@ -107,37 +107,33 @@ private:
 
 
   void timerCallback() {
-    // パラメータ取得
     int histogram_window_ms = this->get_parameter("histogram_window_ms").as_int();
     int64_t window_duration_us = static_cast<int64_t>(histogram_window_ms) * 1000;
-
   
     int64_t cutoff_int = this->get_parameter("count_cutoff").as_int();
     uint8_t count_cutoff = static_cast<uint8_t>(std::min<int64_t>(cutoff_int, 255));
-  
     bool downsample = this->get_parameter("downsample").as_bool();
     int bins = this->get_parameter("bins").as_int();
   
-    // 現在時刻（μs）
-    int64_t now_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-  
-    // 過去 window_duration_us 以内のイベントだけ取得
-    auto events_chunk = event_buffer_.getRecentEvents(now_us, window_duration_us);
-    if (events_chunk.empty()) {
+    // camera 時間ベースの now を取得
+    int64_t now_us = event_buffer_.peekLatestTimestamp();
+    if (now_us == -1) {
+      RCLCPP_WARN(this->get_logger(), "No events yet, skipping this frame.");
       return;
     }
   
-    // ヒストグラム構築
+    // 過去 N μs のイベントを取得
+    auto events_chunk = event_buffer_.getRecentEvents(now_us, window_duration_us);
+    // RCLCPP_INFO(this->get_logger(), "events_chunk size: %zu", events_chunk.size());
+    if (events_chunk.empty()) return;
+  
     EventHistogram histogram(bins, sensor_width_, sensor_height_, count_cutoff, downsample);
     histogram.construct(events_chunk.data(), events_chunk.data() + events_chunk.size());
     histogram.printDimensions();
   
-    // ON/OFF 分離
     std::vector<uint8_t> histogram_on, histogram_off;
     histogram.getHistogramSeparated(histogram_on, histogram_off);
   
-    // メッセージ作成・送信
     evcam_msgs::msg::EventHistogram msg;
     msg.header.stamp = this->now();
     msg.width = static_cast<uint16_t>(sensor_width_);
@@ -148,6 +144,7 @@ private:
   
     publisher_->publish(msg);
   }
+  
   
 
   rclcpp::Publisher<evcam_msgs::msg::EventHistogram>::SharedPtr publisher_;

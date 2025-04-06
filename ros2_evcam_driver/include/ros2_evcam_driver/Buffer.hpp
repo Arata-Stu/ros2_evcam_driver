@@ -12,6 +12,7 @@
 class EventBuffer {
 public:
     void addEvents(const Metavision::EventCD *ev_begin, const Metavision::EventCD *ev_end);
+    int64_t peekLatestTimestamp();
 
     /// @brief すべてのイベントを取得してクリア（互換目的）
     std::vector<Metavision::EventCD> retrieveAndClear();

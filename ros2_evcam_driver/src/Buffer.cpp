@@ -6,6 +6,13 @@ void EventBuffer::addEvents(const Metavision::EventCD *ev_begin, const Metavisio
     buffer_.insert(buffer_.end(), ev_begin, ev_end);
 }
 
+int64_t EventBuffer::peekLatestTimestamp() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (buffer_.empty()) return -1;
+    return buffer_.back().t;
+}
+
+
 std::vector<Metavision::EventCD> EventBuffer::retrieveAndClear() {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<Metavision::EventCD> events(buffer_.begin(), buffer_.end());
