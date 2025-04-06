@@ -7,7 +7,6 @@ EventHistogram::EventHistogram(int bins, int width, int height, uint64_t count_c
     histogram_.resize(2 * bins_ * width_ * height_, 0);
 }
 
-
 void EventHistogram::construct(const Metavision::EventCD* ev_begin, const Metavision::EventCD* ev_end) {
     std::fill(histogram_.begin(), histogram_.end(), 0);
 
@@ -27,7 +26,6 @@ void EventHistogram::construct(const Metavision::EventCD* ev_begin, const Metavi
     int64_t dt = std::max<int64_t>(1, t1 - t0);  // avoid div by zero
 
     for (const Metavision::EventCD* ev = ev_begin; ev != ev_end; ++ev) {
-        // 座標チェック
         if (ev->x >= static_cast<uint16_t>(width_) || ev->y >= static_cast<uint16_t>(height_)) {
             continue;
         }
@@ -44,13 +42,12 @@ void EventHistogram::construct(const Metavision::EventCD* ev_begin, const Metavi
 
         if (idx >= histogram_.size()) {
             std::cerr << "[Error] Out-of-bounds histogram index: " << idx << " (size=" << histogram_.size() << ")" << std::endl;
-            continue;  // 念のため回避
+            continue;
         }
 
         histogram_[idx]++;
     }
 
-    // カウント制限
     if (count_cutoff_ > 0) {
         for (auto &count : histogram_) {
             if (count > count_cutoff_) {
@@ -59,7 +56,6 @@ void EventHistogram::construct(const Metavision::EventCD* ev_begin, const Metavi
         }
     }
 }
-
 
 std::vector<uint64_t> EventHistogram::getHistogram() const {
     if (!downsample_) {
@@ -90,6 +86,15 @@ std::vector<uint64_t> EventHistogram::getHistogram() const {
         }
         return down_hist;
     }
+}
+
+void EventHistogram::getHistogramSeparated(std::vector<uint64_t> &on, std::vector<uint64_t> &off) const {
+    size_t single_size = histogram_.size() / 2;
+    on.resize(single_size);
+    off.resize(single_size);
+
+    std::copy(histogram_.begin(), histogram_.begin() + single_size, on.begin());
+    std::copy(histogram_.begin() + single_size, histogram_.end(), off.begin());
 }
 
 void EventHistogram::printDimensions() const {

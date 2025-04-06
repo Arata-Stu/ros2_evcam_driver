@@ -12,6 +12,10 @@ public:
 
     void construct(const Metavision::EventCD* ev_begin, const Metavision::EventCD* ev_end);
     std::vector<uint64_t> getHistogram() const;
+
+    /// 追加：ON/OFFに分離して取得する
+    void getHistogramSeparated(std::vector<uint64_t> &on, std::vector<uint64_t> &off) const;
+
     void printDimensions() const;
 
 private:
