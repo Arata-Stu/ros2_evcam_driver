@@ -1,0 +1,13 @@
+<launch>
+  <node pkg="ros2_evcam_driver" exec="event_histogram_publisher_node" name="event_histogram_publisher" output="screen">
+
+    <param name="accumulation_period_ms" value="20" />
+    <param name="count_cutoff" value="255" />
+    <param name="downsample" value="false" />
+    <param name="bins" value="1" />
+  </node>
+
+  <node pkg="ros2_evcam_driver" exec="event_histogram_visualizer_node" name="event_histogram_visualizer_node" output="screen">
+  </node>
+
+</launch>
