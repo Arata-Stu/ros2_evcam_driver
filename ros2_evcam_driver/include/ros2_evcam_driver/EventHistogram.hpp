@@ -8,13 +8,11 @@
 
 class EventHistogram {
 public:
-    EventHistogram(int bins, int width, int height, uint64_t count_cutoff = 0, bool downsample = false);
+    EventHistogram(int bins, int width, int height, uint8_t count_cutoff = 255, bool downsample = false);
 
     void construct(const Metavision::EventCD* ev_begin, const Metavision::EventCD* ev_end);
-    std::vector<uint64_t> getHistogram() const;
-
-    /// 追加：ON/OFFに分離して取得する
-    void getHistogramSeparated(std::vector<uint64_t> &on, std::vector<uint64_t> &off) const;
+    std::vector<uint8_t> getHistogram() const;
+    void getHistogramSeparated(std::vector<uint8_t> &on, std::vector<uint8_t> &off) const;
 
     void printDimensions() const;
 
@@ -22,9 +20,9 @@ private:
     int width_;
     int height_;
     int bins_;
-    uint64_t count_cutoff_;
+    uint8_t count_cutoff_;
     bool downsample_;
-    std::vector<uint64_t> histogram_; // (2 * bins * H * W)
+    std::vector<uint8_t> histogram_;  // 軽量化後: 2 * bins * W * H
 };
 
 #endif // EVENTHISTOGRAM_HPP

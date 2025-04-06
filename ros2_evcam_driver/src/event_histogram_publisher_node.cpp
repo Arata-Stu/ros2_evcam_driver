@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
-#include "evcam_msgs/msg/event_histogram.hpp"  // 別パッケージのカスタムメッセージ
+#include "evcam_msgs/msg/event_histogram.hpp"  
 
 #include <metavision/sdk/driver/camera.h>
 #include <metavision/sdk/base/utils/log.h>
@@ -19,22 +19,17 @@ public:
   EventHistogramPublisherNode()
   : Node("event_histogram_publisher_node")
   {
-    // パラメータの宣言（初期値を設定）
     this->declare_parameter<int>("accumulation_period_ms", 10);
     this->declare_parameter<int64_t>("count_cutoff", 0LL);
     this->declare_parameter<bool>("downsample", false);
-    this->declare_parameter<int>("bins", 1);  
+    this->declare_parameter<int>("bins", 1);
 
-
-    // パラメータの動的更新用コールバックの登録
     parameter_callback_handle_ = this->add_on_set_parameters_callback(
       std::bind(&EventHistogramPublisherNode::onParameterChanged, this, std::placeholders::_1)
     );
 
-    // ヒストグラムメッセージのパブリッシャー作成
     publisher_ = this->create_publisher<evcam_msgs::msg::EventHistogram>("event_histogram", 10);
 
-    // カメラの初期化
     try {
       camera_ = std::make_shared<Metavision::Camera>(Metavision::Camera::from_first_available());
     } catch (const Metavision::CameraException &e) {
@@ -43,20 +38,17 @@ public:
       return;
     }
 
-    // カメラからセンサのジオメトリを取得してサイズを設定
     const auto &geometry = camera_->geometry();
     sensor_width_  = geometry.width();
     sensor_height_ = geometry.height();
     RCLCPP_INFO(this->get_logger(), "Sensor geometry: width=%d, height=%d", sensor_width_, sensor_height_);
 
-    // カメライベントの受信コールバック登録（EventBuffer に追加）
     callback_id_ = camera_->cd().add_callback(
       [this](const Metavision::EventCD *ev_begin, const Metavision::EventCD *ev_end) {
         event_buffer_.addEvents(ev_begin, ev_end);
       }
     );
 
-    // カメラストリーミング開始
     try {
       camera_->start();
     } catch (const Metavision::CameraException &e) {
@@ -65,7 +57,6 @@ public:
       return;
     }
 
-    // タイマーを作成（蓄積時間はパラメータから取得）
     int accumulation_period_ms = this->get_parameter("accumulation_period_ms").as_int();
     timer_ = this->create_wall_timer(
       std::chrono::milliseconds(accumulation_period_ms),
@@ -81,14 +72,11 @@ public:
   }
 
 private:
-  // パラメータ変更時のコールバック
-  rcl_interfaces::msg::SetParametersResult onParameterChanged(
-      const std::vector<rclcpp::Parameter> &parameters)
+  rcl_interfaces::msg::SetParametersResult onParameterChanged(const std::vector<rclcpp::Parameter> &parameters)
   {
     for (const auto &param : parameters) {
       if (param.get_name() == "accumulation_period_ms") {
         int new_period = param.as_int();
-        // タイマーの更新：タイマーを再作成することで変更を反映
         timer_->cancel();
         timer_ = this->create_wall_timer(
           std::chrono::milliseconds(new_period),
@@ -104,7 +92,6 @@ private:
         int val = param.as_int();
         RCLCPP_INFO(this->get_logger(), "Updated bins: %d", val);
       }
-      
     }
     rcl_interfaces::msg::SetParametersResult result;
     result.successful = true;
@@ -113,45 +100,33 @@ private:
   }
 
   void timerCallback() {
-    // パラメータ取得
-    int accumulation_period_ms = this->get_parameter("accumulation_period_ms").as_int();
     int64_t cutoff_int = this->get_parameter("count_cutoff").as_int();
-    uint64_t count_cutoff = static_cast<uint64_t>(cutoff_int);
+    uint8_t count_cutoff = static_cast<uint8_t>(std::min<int64_t>(cutoff_int, 255));
     bool downsample = this->get_parameter("downsample").as_bool();
     int bins = this->get_parameter("bins").as_int();
-  
-    // バッファから蓄積イベント取得
+
     auto events_chunk = event_buffer_.retrieveAndClear();
     if (events_chunk.empty()) {
       return;
     }
-  
-    // ヒストグラム構築（bin対応版）
+
     EventHistogram histogram(bins, sensor_width_, sensor_height_, count_cutoff, downsample);
     histogram.construct(events_chunk.data(), events_chunk.data() + events_chunk.size());
-    histogram.printDimensions();  // オプション：ログ出力
-  
-    // ON/OFF分離ヒストグラム取得
-    std::vector<uint64_t> histogram_on_u64, histogram_off_u64;
-    histogram.getHistogramSeparated(histogram_on_u64, histogram_off_u64);
-  
-    // uint64_t → uint32_tに変換
-    std::vector<uint32_t> histogram_on(histogram_on_u64.begin(), histogram_on_u64.end());
-    std::vector<uint32_t> histogram_off(histogram_off_u64.begin(), histogram_off_u64.end());
-  
-    // メッセージ作成＆パブリッシュ
+    histogram.printDimensions();
+
+    std::vector<uint8_t> histogram_on, histogram_off;
+    histogram.getHistogramSeparated(histogram_on, histogram_off);
+
     evcam_msgs::msg::EventHistogram msg;
-    msg.header.stamp = this->now();  // 時間情報追加
-    msg.width = sensor_width_;
-    msg.height = sensor_height_;
-    msg.bins = static_cast<uint32_t>(bins);
+    msg.header.stamp = this->now();
+    msg.width = static_cast<uint16_t>(sensor_width_);
+    msg.height = static_cast<uint16_t>(sensor_height_);
+    msg.bins = static_cast<uint8_t>(bins);
     msg.histogram_on = histogram_on;
     msg.histogram_off = histogram_off;
-  
+
     publisher_->publish(msg);
   }
-  
-  
 
   rclcpp::Publisher<evcam_msgs::msg::EventHistogram>::SharedPtr publisher_;
   rclcpp::TimerBase::SharedPtr timer_;

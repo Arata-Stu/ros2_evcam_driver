@@ -1,9 +1,15 @@
 #include "EventHistogram.hpp"
 #include <algorithm>
 #include <limits>
+#include <iostream>
 
-EventHistogram::EventHistogram(int bins, int width, int height, uint64_t count_cutoff, bool downsample)
-    : width_(width), height_(height), bins_(bins), count_cutoff_(count_cutoff), downsample_(downsample) {
+EventHistogram::EventHistogram(int bins, int width, int height, uint8_t count_cutoff, bool downsample)
+    : width_(width),
+      height_(height),
+      bins_(bins),
+      count_cutoff_(std::min(count_cutoff, static_cast<uint8_t>(255))),
+      downsample_(downsample)
+{
     histogram_.resize(2 * bins_ * width_ * height_, 0);
 }
 
@@ -45,25 +51,19 @@ void EventHistogram::construct(const Metavision::EventCD* ev_begin, const Metavi
             continue;
         }
 
-        histogram_[idx]++;
-    }
-
-    if (count_cutoff_ > 0) {
-        for (auto &count : histogram_) {
-            if (count > count_cutoff_) {
-                count = count_cutoff_;
-            }
+        if (histogram_[idx] < count_cutoff_) {
+            histogram_[idx]++;
         }
     }
 }
 
-std::vector<uint64_t> EventHistogram::getHistogram() const {
+std::vector<uint8_t> EventHistogram::getHistogram() const {
     if (!downsample_) {
         return histogram_;
     } else {
         int new_width = width_ / 2;
         int new_height = height_ / 2;
-        std::vector<uint64_t> down_hist(2 * bins_ * new_width * new_height, 0);
+        std::vector<uint8_t> down_hist(2 * bins_ * new_width * new_height, 0);
 
         for (int ch = 0; ch < 2; ++ch) {
             for (int b = 0; b < bins_; ++b) {
@@ -73,13 +73,14 @@ std::vector<uint64_t> EventHistogram::getHistogram() const {
                         int orig_x = x * 2;
 
                         size_t base_idx = ch * bins_ * width_ * height_ + b * width_ * height_;
-                        uint64_t sum = 0;
+                        uint32_t sum = 0;
                         sum += histogram_[base_idx + orig_y * width_ + orig_x];
                         sum += histogram_[base_idx + orig_y * width_ + orig_x + 1];
                         sum += histogram_[base_idx + (orig_y + 1) * width_ + orig_x];
                         sum += histogram_[base_idx + (orig_y + 1) * width_ + orig_x + 1];
 
-                        down_hist[ch * bins_ * new_width * new_height + b * new_width * new_height + y * new_width + x] = sum;
+                        sum = std::min<uint32_t>(sum, count_cutoff_);
+                        down_hist[ch * bins_ * new_width * new_height + b * new_width * new_height + y * new_width + x] = static_cast<uint8_t>(sum);
                     }
                 }
             }
@@ -88,13 +89,10 @@ std::vector<uint64_t> EventHistogram::getHistogram() const {
     }
 }
 
-void EventHistogram::getHistogramSeparated(std::vector<uint64_t> &on, std::vector<uint64_t> &off) const {
+void EventHistogram::getHistogramSeparated(std::vector<uint8_t> &on, std::vector<uint8_t> &off) const {
     size_t single_size = histogram_.size() / 2;
-    on.resize(single_size);
-    off.resize(single_size);
-
-    std::copy(histogram_.begin(), histogram_.begin() + single_size, on.begin());
-    std::copy(histogram_.begin() + single_size, histogram_.end(), off.begin());
+    on.assign(histogram_.begin(), histogram_.begin() + single_size);
+    off.assign(histogram_.begin() + single_size, histogram_.end());
 }
 
 void EventHistogram::printDimensions() const {

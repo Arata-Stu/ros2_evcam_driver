@@ -1,8 +1,8 @@
 #include "Visualization.hpp"
 #include <iostream>
 
-cv::Mat visualizeHistogram(const std::vector<uint64_t>& hist, int bins, int width, int height, bool use_ratio) {
-    cv::Mat img(height, width, CV_8UC1, cv::Scalar(127));  // 初期値：中間グレー
+cv::Mat visualizeHistogram(const std::vector<uint8_t>& hist, int bins, int width, int height, bool use_ratio) {
+    cv::Mat img(height, width, CV_8UC1, cv::Scalar(127));  // 中間グレーで初期化
 
     if (hist.size() != static_cast<size_t>(2 * bins * width * height)) {
         std::cerr << "[visualizeHistogram] Invalid histogram size. Got "
@@ -18,6 +18,7 @@ cv::Mat visualizeHistogram(const std::vector<uint64_t>& hist, int bins, int widt
             for (int x = 0; x < width; ++x) {
                 size_t idx_on  = 0 * (bins * width * height) + b * width * height + y * width + x;
                 size_t idx_off = 1 * (bins * width * height) + b * width * height + y * width + x;
+
                 pos_sum.at<int>(y, x) += static_cast<int>(hist[idx_on]);
                 neg_sum.at<int>(y, x) += static_cast<int>(hist[idx_off]);
             }
@@ -37,10 +38,7 @@ cv::Mat visualizeHistogram(const std::vector<uint64_t>& hist, int bins, int widt
                     pixel_val = static_cast<unsigned char>(ratio * 255.0);
                 }
             } else {
-                if (on > off)
-                    pixel_val = 255;
-                else if (on < off)
-                    pixel_val = 0;
+                pixel_val = (on > off) ? 255 : ((on < off) ? 0 : 127);
             }
 
             img.at<uchar>(y, x) = pixel_val;
