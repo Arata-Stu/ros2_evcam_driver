@@ -5,7 +5,7 @@ void EventBuffer::addEvents(const Metavision::EventCD *ev_begin, const Metavisio
     std::lock_guard<std::mutex> lock(mutex_);
     size_t count = ev_end - ev_begin;
     buffer_.insert(buffer_.end(), ev_begin, ev_end);
-    MV_LOG_INFO() << "Added " << count << " events. Total events in buffer: " << buffer_.size();
+    // MV_LOG_INFO() << "Added " << count << " events. Total events in buffer: " << buffer_.size();
 }
 
 std::vector<Metavision::EventCD> EventBuffer::retrieveAndClear() {
