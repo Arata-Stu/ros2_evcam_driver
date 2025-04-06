@@ -30,21 +30,29 @@ private:
     int height = msg->height;
     int bins = msg->bins;
 
-    // bins=1 でも stacked 関数を使えばOK
-    cv::Mat image = visualizeHistogram(msg->histogram, bins, width, height);
+    // histogram_onとhistogram_offを統合した可視化用のヒストグラムを作成
+    std::vector<uint32_t> merged_histogram(width * height * bins * 2);
 
-    // 見やすくリサイズ
-    cv::Mat image_resized;
-    cv::resize(image, image_resized, cv::Size(width * 2, height * 2), 0, 0, cv::INTER_NEAREST);
+    size_t single_size = width * height * bins;
+
+    // ONを前半、OFFを後半に統合（可視化の仕様に応じて変更可）
+    for (size_t i = 0; i < single_size; ++i) {
+      merged_histogram[i] = msg->histogram_on[i];
+      merged_histogram[i + single_size] = msg->histogram_off[i];
+    }
+
+    // visualizeHistogram に統合したヒストグラムを渡す
+    cv::Mat image = visualizeHistogram(merged_histogram, bins, width, height);
 
     // 画像メッセージに変換してpublish
     std_msgs::msg::Header header;
-    header.stamp = this->get_clock()->now();
+    header.stamp = msg->header.stamp;  // 元のタイムスタンプを使う
     header.frame_id = "camera_frame";
 
-    cv_bridge::CvImage cv_image(header, "mono8", image_resized);
+    cv_bridge::CvImage cv_image(header, "mono8", image);
     image_publisher_->publish(*cv_image.toImageMsg());
   }
+
 
 
   rclcpp::Subscription<evcam_msgs::msg::EventHistogram>::SharedPtr subscription_;

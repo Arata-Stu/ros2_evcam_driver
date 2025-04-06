@@ -131,15 +131,26 @@ private:
     histogram.construct(events_chunk.data(), events_chunk.data() + events_chunk.size());
     histogram.printDimensions();  // オプション：ログ出力
   
+    // ON/OFF分離ヒストグラム取得
+    std::vector<uint64_t> histogram_on_u64, histogram_off_u64;
+    histogram.getHistogramSeparated(histogram_on_u64, histogram_off_u64);
+  
+    // uint64_t → uint32_tに変換
+    std::vector<uint32_t> histogram_on(histogram_on_u64.begin(), histogram_on_u64.end());
+    std::vector<uint32_t> histogram_off(histogram_off_u64.begin(), histogram_off_u64.end());
+  
     // メッセージ作成＆パブリッシュ
     evcam_msgs::msg::EventHistogram msg;
-    msg.width  = sensor_width_;
+    msg.header.stamp = this->now();  // 時間情報追加
+    msg.width = sensor_width_;
     msg.height = sensor_height_;
-    msg.bins   = static_cast<uint32_t>(bins);
-    msg.histogram = histogram.getHistogram();  // flatten済
+    msg.bins = static_cast<uint32_t>(bins);
+    msg.histogram_on = histogram_on;
+    msg.histogram_off = histogram_off;
   
     publisher_->publish(msg);
   }
+  
   
 
   rclcpp::Publisher<evcam_msgs::msg::EventHistogram>::SharedPtr publisher_;
