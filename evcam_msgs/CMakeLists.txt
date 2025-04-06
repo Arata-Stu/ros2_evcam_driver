@@ -8,7 +8,9 @@ find_package(std_msgs REQUIRED)
 # メッセージファイルの指定
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/EventHistogram.msg"
+  DEPENDENCIES std_msgs
 )
+
 
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
