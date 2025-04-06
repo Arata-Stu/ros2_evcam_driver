@@ -30,23 +30,23 @@ private:
     int height = msg->height;
     int bins = msg->bins;
 
-    // histogram_onとhistogram_offを統合した可視化用のヒストグラムを作成
-    std::vector<uint32_t> merged_histogram(width * height * bins * 2);
+    std::size_t single_size = width * height * bins;
 
-    size_t single_size = width * height * bins;
-
-    // ONを前半、OFFを後半に統合（可視化の仕様に応じて変更可）
+    // uint32_t で受け取ってから...
+    std::vector<uint32_t> merged_histogram_u32(single_size * 2);
     for (size_t i = 0; i < single_size; ++i) {
-      merged_histogram[i] = msg->histogram_on[i];
-      merged_histogram[i + single_size] = msg->histogram_off[i];
+      merged_histogram_u32[i] = msg->histogram_on[i];
+      merged_histogram_u32[i + single_size] = msg->histogram_off[i];
     }
 
-    // visualizeHistogram に統合したヒストグラムを渡す
-    cv::Mat image = visualizeHistogram(merged_histogram, bins, width, height);
+    // uint64_t に変換
+    std::vector<uint64_t> merged_histogram_u64(merged_histogram_u32.begin(), merged_histogram_u32.end());
 
-    // 画像メッセージに変換してpublish
+    // visualize
+    cv::Mat image = visualizeHistogram(merged_histogram_u64, bins, width, height);
+
     std_msgs::msg::Header header;
-    header.stamp = msg->header.stamp;  // 元のタイムスタンプを使う
+    header.stamp = msg->header.stamp;
     header.frame_id = "camera_frame";
 
     cv_bridge::CvImage cv_image(header, "mono8", image);
