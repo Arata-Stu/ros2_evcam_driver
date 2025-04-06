@@ -19,7 +19,8 @@ public:
   EventHistogramPublisherNode()
   : Node("event_histogram_publisher_node")
   {
-    this->declare_parameter<int>("accumulation_period_ms", 10);
+    this->declare_parameter<int>("publish_period_ms", 10);
+    this->declare_parameter<int>("histogram_window_ms", 100);
     this->declare_parameter<int64_t>("count_cutoff", 0LL);
     this->declare_parameter<bool>("downsample", false);
     this->declare_parameter<int>("bins", 1);
@@ -57,11 +58,12 @@ public:
       return;
     }
 
-    int accumulation_period_ms = this->get_parameter("accumulation_period_ms").as_int();
+    int publish_period_ms = this->get_parameter("publish_period_ms").as_int();
     timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(accumulation_period_ms),
+      std::chrono::milliseconds(publish_period_ms),
       std::bind(&EventHistogramPublisherNode::timerCallback, this)
     );
+
   }
 
   ~EventHistogramPublisherNode() {
@@ -75,14 +77,17 @@ private:
   rcl_interfaces::msg::SetParametersResult onParameterChanged(const std::vector<rclcpp::Parameter> &parameters)
   {
     for (const auto &param : parameters) {
-      if (param.get_name() == "accumulation_period_ms") {
+      if (param.get_name() == "publish_period_ms") {
         int new_period = param.as_int();
         timer_->cancel();
         timer_ = this->create_wall_timer(
           std::chrono::milliseconds(new_period),
           std::bind(&EventHistogramPublisherNode::timerCallback, this)
         );
-        RCLCPP_INFO(this->get_logger(), "Updated accumulation_period_ms: %d", new_period);
+        RCLCPP_INFO(this->get_logger(), "Updated publish_period_ms: %d", new_period);
+      } else if (param.get_name() == "histogram_window_ms") {
+        int duration = param.as_int();
+        RCLCPP_INFO(this->get_logger(), "Updated histogram_window_ms: %d", duration);
       } else if (param.get_name() == "count_cutoff") {
         int64_t cutoff = param.as_int();
         RCLCPP_INFO(this->get_logger(), "Updated count_cutoff: %ld", cutoff);
@@ -93,30 +98,46 @@ private:
         RCLCPP_INFO(this->get_logger(), "Updated bins: %d", val);
       }
     }
+
     rcl_interfaces::msg::SetParametersResult result;
     result.successful = true;
     result.reason = "Parameters updated successfully";
     return result;
   }
 
+
   void timerCallback() {
+    // パラメータ取得
+    int histogram_window_ms = this->get_parameter("histogram_window_ms").as_int();
+    int64_t window_duration_us = static_cast<int64_t>(histogram_window_ms) * 1000;
+
+  
     int64_t cutoff_int = this->get_parameter("count_cutoff").as_int();
     uint8_t count_cutoff = static_cast<uint8_t>(std::min<int64_t>(cutoff_int, 255));
+  
     bool downsample = this->get_parameter("downsample").as_bool();
     int bins = this->get_parameter("bins").as_int();
-
-    auto events_chunk = event_buffer_.retrieveAndClear();
+  
+    // 現在時刻（μs）
+    int64_t now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+  
+    // 過去 window_duration_us 以内のイベントだけ取得
+    auto events_chunk = event_buffer_.getRecentEvents(now_us, window_duration_us);
     if (events_chunk.empty()) {
       return;
     }
-
+  
+    // ヒストグラム構築
     EventHistogram histogram(bins, sensor_width_, sensor_height_, count_cutoff, downsample);
     histogram.construct(events_chunk.data(), events_chunk.data() + events_chunk.size());
     histogram.printDimensions();
-
+  
+    // ON/OFF 分離
     std::vector<uint8_t> histogram_on, histogram_off;
     histogram.getHistogramSeparated(histogram_on, histogram_off);
-
+  
+    // メッセージ作成・送信
     evcam_msgs::msg::EventHistogram msg;
     msg.header.stamp = this->now();
     msg.width = static_cast<uint16_t>(sensor_width_);
@@ -124,9 +145,10 @@ private:
     msg.bins = static_cast<uint8_t>(bins);
     msg.histogram_on = histogram_on;
     msg.histogram_off = histogram_off;
-
+  
     publisher_->publish(msg);
   }
+  
 
   rclcpp::Publisher<evcam_msgs::msg::EventHistogram>::SharedPtr publisher_;
   rclcpp::TimerBase::SharedPtr timer_;
