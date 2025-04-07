@@ -30,11 +30,11 @@ private:
     if (hist_buffer_.isReady(output_bins_)) {
       auto stacked = hist_buffer_.generateStackedHistogram(output_bins_);
       stacked_publisher_->publish(stacked);
-      RCLCPP_INFO(this->get_logger(), "Published stacked histogram (bins=%d, size_on=%zu, size_off=%zu)",
-                  output_bins_, stacked.histogram_on.size(), stacked.histogram_off.size());
+      // RCLCPP_INFO(this->get_logger(), "Published stacked histogram (bins=%d, size_on=%zu, size_off=%zu)",
+      //             output_bins_, stacked.histogram_on.size(), stacked.histogram_off.size());
     } else {
-      RCLCPP_DEBUG(this->get_logger(), "Waiting for enough histograms: %ld / %d",
-                   hist_buffer_.size(), output_bins_);
+      // RCLCPP_DEBUG(this->get_logger(), "Waiting for enough histograms: %ld / %d",
+      //              hist_buffer_.size(), output_bins_);
     }
   }
 
