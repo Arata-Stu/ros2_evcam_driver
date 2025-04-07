@@ -20,5 +20,15 @@ add_executable(histogram_accumulator_node src/histogram_accumulator_node.cpp)
 ament_target_dependencies(histogram_accumulator_node rclcpp evcam_msgs)
 target_link_libraries(histogram_accumulator_node histogram_buffer)
 
+install(TARGETS
+  histogram_accumulator_node
+  histogram_buffer
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
+)
 
 ament_package()
