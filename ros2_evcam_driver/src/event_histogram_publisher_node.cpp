@@ -129,7 +129,7 @@ private:
   
     EventHistogram histogram(bins, sensor_width_, sensor_height_, count_cutoff, downsample);
     histogram.construct(events_chunk.data(), events_chunk.data() + events_chunk.size());
-    histogram.printDimensions();
+    // histogram.printDimensions();
   
     std::vector<uint8_t> histogram_on, histogram_off;
     histogram.getHistogramSeparated(histogram_on, histogram_off);
