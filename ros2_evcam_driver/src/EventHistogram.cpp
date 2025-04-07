@@ -12,7 +12,6 @@ EventHistogram::EventHistogram(int bins, int width, int height, uint8_t count_cu
 {
     histogram_.resize(2 * bins_ * width_ * height_, 0);
 }
-
 void EventHistogram::construct(const Metavision::EventCD* ev_begin, const Metavision::EventCD* ev_end) {
     std::fill(histogram_.begin(), histogram_.end(), 0);
 
@@ -21,41 +20,60 @@ void EventHistogram::construct(const Metavision::EventCD* ev_begin, const Metavi
         return;
     }
 
-    auto t0 = ev_begin->t;
-    auto t1 = (ev_end - 1)->t;
+    const int wh = width_ * height_;
 
-    if (t1 < t0) {
-        std::cerr << "[Warning] Non-monotonic timestamps (t1 < t0): " << t1 << " < " << t0 << std::endl;
-        return;
-    }
+    if (bins_ == 1) {
+        // 高速パス（時間分割なし）
+        for (const Metavision::EventCD* ev = ev_begin; ev != ev_end; ++ev) {
+            if (ev->x >= static_cast<uint16_t>(width_) || ev->y >= static_cast<uint16_t>(height_)) {
+                continue;
+            }
 
-    int64_t dt = std::max<int64_t>(1, t1 - t0);  // avoid div by zero
+            int pol = (ev->p == 1) ? 0 : 1;
+            size_t idx = pol * wh + ev->y * width_ + ev->x;
 
-    for (const Metavision::EventCD* ev = ev_begin; ev != ev_end; ++ev) {
-        if (ev->x >= static_cast<uint16_t>(width_) || ev->y >= static_cast<uint16_t>(height_)) {
-            continue;
+            if (histogram_[idx] < count_cutoff_) {
+                histogram_[idx]++;
+            }
+        }
+    } else {
+        // 通常パス（時間分割あり）
+        auto t0 = ev_begin->t;
+        auto t1 = (ev_end - 1)->t;
+
+        if (t1 < t0) {
+            std::cerr << "[Warning] Non-monotonic timestamps (t1 < t0): " << t1 << " < " << t0 << std::endl;
+            return;
         }
 
-        int pol = (ev->p == 1) ? 0 : 1;
-        int bin_idx = static_cast<int>(((ev->t - t0) * bins_) / dt);
-        if (bin_idx < 0) bin_idx = 0;
-        if (bin_idx >= bins_) bin_idx = bins_ - 1;
+        int64_t dt = std::max<int64_t>(1, t1 - t0);  // avoid div by zero
 
-        size_t idx =
-            pol * (bins_ * width_ * height_) +
-            bin_idx * (width_ * height_) +
-            ev->y * width_ + ev->x;
+        for (const Metavision::EventCD* ev = ev_begin; ev != ev_end; ++ev) {
+            if (ev->x >= static_cast<uint16_t>(width_) || ev->y >= static_cast<uint16_t>(height_)) {
+                continue;
+            }
 
-        if (idx >= histogram_.size()) {
-            std::cerr << "[Error] Out-of-bounds histogram index: " << idx << " (size=" << histogram_.size() << ")" << std::endl;
-            continue;
-        }
+            int pol = (ev->p == 1) ? 0 : 1;
+            int bin_idx = static_cast<int>(((ev->t - t0) * bins_) / dt);
+            bin_idx = std::clamp(bin_idx, 0, bins_ - 1);
 
-        if (histogram_[idx] < count_cutoff_) {
-            histogram_[idx]++;
+            size_t idx = pol * (bins_ * wh) + bin_idx * wh + ev->y * width_ + ev->x;
+
+#ifndef NDEBUG
+            if (idx >= histogram_.size()) {
+                std::cerr << "[Error] Out-of-bounds histogram index: " << idx
+                          << " (size=" << histogram_.size() << ")" << std::endl;
+                continue;
+            }
+#endif
+
+            if (histogram_[idx] < count_cutoff_) {
+                histogram_[idx]++;
+            }
         }
     }
 }
+
 
 std::vector<uint8_t> EventHistogram::getHistogram() const {
     if (!downsample_) {
